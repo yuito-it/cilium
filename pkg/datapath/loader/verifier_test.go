@@ -160,13 +160,14 @@ func (c *collection) Run(t *testing.T, kv kernelVersion, records *verifierComple
 		t.Parallel()
 		i := 1
 		for perm := range buildPermutations(c.progDir, kv, c.loadPermutations) {
-			t.Run(strconv.Itoa(i), compileAndLoad(perm, c.collection, c.source, c.output, i, records))
+			t.Run(strconv.Itoa(i), compileAndLoad(perm, c.collection, c.source, c.output, kv, i, records))
 			i++
 		}
 	})
 }
 
-func compileAndLoad(perm buildPermutation, collection, source, output string, build int, records *verifierComplexityRecords) func(t *testing.T) {
+func compileAndLoad(perm buildPermutation, collection, source, output string, kv kernelVersion,
+	build int, records *verifierComplexityRecords) func(t *testing.T) {
 	return func(t *testing.T) {
 		t.Parallel()
 
@@ -208,7 +209,7 @@ func compileAndLoad(perm buildPermutation, collection, source, output string, bu
 				spec,
 				constants,
 				collection,
-				build, ii,
+				kv, build, ii,
 				records,
 			))
 			ii++
@@ -229,12 +230,18 @@ func loadAndRecordComplexity(
 	spec *ebpf.CollectionSpec,
 	constants any,
 	collection string,
+	kv kernelVersion,
 	build, load int,
 	records *verifierComplexityRecords,
 ) func(t *testing.T) {
 	return func(t *testing.T) {
 		t.Parallel()
 		log := hivetest.Logger(t, hivetest.LogLevel(slog.LevelDebug))
+
+		logLevel := ebpf.LogLevelInstruction | ebpf.LogLevelStats
+		if kv == kernelVersion510 {
+			logLevel = ebpf.LogLevelStats
+		}
 
 		var (
 			coll *ebpf.Collection
@@ -248,7 +255,7 @@ func loadAndRecordComplexity(
 					Programs: ebpf.ProgramOptions{
 						// We need verbose logs to parse the functions visited at runtime and
 						// associate them to the reported stack depths.
-						LogLevel: ebpf.LogLevelInstruction | ebpf.LogLevelStats,
+						LogLevel: logLevel,
 					},
 				},
 			})
@@ -353,11 +360,18 @@ func loadAndRecordComplexity(
 				t.Fatalf("Failed to parse verifier log for program %s: %v", n, err)
 			}
 
-			stackDepth, stackDepthIndex, err := parseStackDepth(s, p.VerifierLog, lastLineIndex, lastOff)
-			if err != nil {
-				t.Fatalf("Failed to parse stack depth for program %s: %v", n, err)
+			stackDepthIndex := strings.LastIndex(p.VerifierLog[:lastLineIndex], "\n")
+			// On v5.15 and before (indicated by kernel name "510"), the full
+			// verifier logs are too verbose to retrieve and without them, we
+			// can't properly parse the stack depths.
+			if kv != kernelVersion510 {
+				var stackDepth int
+				stackDepth, stackDepthIndex, err = parseStackDepth(s, p.VerifierLog, lastLineIndex, lastOff)
+				if err != nil {
+					t.Fatalf("Failed to parse stack depth for program %s: %v", n, err)
+				}
+				r.StackDepth = stackDepth
 			}
-			r.StackDepth = stackDepth
 
 			// Extract the third to last line, which looks like:
 			//   verification time 355643 usec
