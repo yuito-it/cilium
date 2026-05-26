@@ -411,13 +411,22 @@ func parseStackDepth(s *ebpf.ProgramSpec, verifierLogs string, lastLineIndex, la
 	// On newer kernels, the stack depth line may look as follows, so we need
 	// to remove the max info at the end.
 	//   stack depth 144+255 max 400
-	stackDepthLine = strings.Split(stackDepthLine, " max ")[0]
+	stackDepthInfo := strings.Split(stackDepthLine, " max ")
+
+	// On newer kernels, we can just return the max.
+	if len(stackDepthInfo) == 2 {
+		maxDepth, err := strconv.Atoi(stackDepthInfo[1])
+		if err != nil {
+			return 0, stackDepthIndex, err
+		}
+		return maxDepth, stackDepthIndex, nil
+	}
 
 	// Remove prefix so we are just left with plus separated stack depths, and parse them into ints.
 	//   144+280+120
 	// Split and parse to ints
 	var depths []int
-	for part := range strings.SplitSeq(stackDepthLine, "+") {
+	for part := range strings.SplitSeq(stackDepthInfo[0], "+") {
 		depth, err := strconv.Atoi(part)
 		if err != nil {
 			return 0, stackDepthIndex, err
