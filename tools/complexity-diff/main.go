@@ -112,7 +112,7 @@ func printDiffRecords(oldRecords, newRecords map[string]verifierComplexityRecord
 	printTopMinMax("largest differences by instructions processed", minMaxInsnsProcessed, percentInsnsProcessedDiff, colorRelativeChange)
 
 	minMaxStackDepth := calcMinMax(diffRecords, func(r verifierComplexityRecord) (int, int) {
-		if r.Kernel == "v5.15" {
+		if r.Kernel != "bpf-next" {
 			return math.MinInt, math.MinInt
 		}
 		return r.StackDepth, r.OrigStackDepth
@@ -142,7 +142,7 @@ func printCurrentState(newRecords map[string]verifierComplexityRecord) []error {
 	}
 
 	minMaxStackDepth := calcMinMax(sortedNewRecords, func(r verifierComplexityRecord) (int, int) {
-		if r.Kernel == "v5.15" {
+		if r.Kernel != "bpf-next" {
 			return math.MinInt, math.MinInt
 		}
 		return r.StackDepth, r.OrigStackDepth
